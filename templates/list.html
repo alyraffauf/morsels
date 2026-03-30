@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}morsels - {% if handle %}{{ handle }}{% else %}{{ did }}{% endif %}{% endblock %}
+
+{% block content %}
+<!-- Profile card -->
+<div class="flex items-center gap-3 mb-6 pb-5 border-b border-gray-100">
+    {% if profile.avatar_url %}
+    <img src="{{ profile.avatar_url }}" alt="" class="w-12 h-12 rounded-full">
+    {% else %}
+    <div class="w-12 h-12 rounded-full bg-gray-100"></div>
+    {% endif %}
+    <div>
+        <h1 class="text-base font-semibold text-gray-900">
+            {% if profile.display_name %}{{ profile.display_name }}
+            {% elif handle %}{{ handle }}
+            {% else %}{{ did }}{% endif %}
+        </h1>
+        <div class="flex items-center gap-1.5 mt-0.5">
+            {% if handle and profile.display_name %}
+            <p class="text-xs text-gray-500">{{ handle }}</p>
+            {% endif %}
+            {% if profile.pronouns %}
+            <span class="text-xs text-gray-400">&middot; {{ profile.pronouns }}</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Bites -->
+{% include "_bite_list.html" %}
+{% endblock %}

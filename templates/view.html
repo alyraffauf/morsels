@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}morsels - {{ title }}{% endblock %}
+
+{% block content %}
+<div class="border border-gray-200 rounded-md overflow-hidden shadow-sm">
+    <div class="relative flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+        <div class="flex items-center gap-1.5">
+            <a href="{{ url_for('list_bites', identifier=did) }}">
+                {% if profile.avatar_url %}
+                <img src="{{ profile.avatar_url }}" alt="" class="w-4 h-4 rounded-full">
+                {% else %}
+                <div class="w-4 h-4 rounded-full bg-gray-100"></div>
+                {% endif %}
+            </a>
+            <a href="{{ url_for('list_bites', identifier=did) }}"
+               class="text-xs text-amber-600 hover:text-amber-700 transition-colors">{{ handle or did }}</a>
+        </div>
+        <span class="absolute inset-0 flex items-center justify-center text-sm font-medium text-gray-900 pointer-events-none">{{ title }}</span>
+        <div class="flex items-baseline gap-2">
+            <span class="text-xs text-gray-400">{{ created_at | humandate }}</span>
+            {% if g.user and g.user.did == did %}
+            <form method="post" action="{{ url_for('delete_bite', identifier=did, rkey=at_uri.split('/')[-1]) }}" class="inline leading-none">
+                <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+                <button type="submit" class="text-xs text-gray-400 hover:text-red-500 transition-colors leading-none p-0">delete</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    <!-- prettier-ignore -->
+    <div class="highlight bg-gray-50 overflow-x-auto">
+        <table class="w-full text-sm leading-6">
+            {% for line in paste_html.split('\n') %}
+            <tr>
+                <td class="w-1 pl-3 pr-2 py-0 text-right text-gray-400 select-none border-r border-gray-200 align-top font-mono tabular-nums">{{ loop.index }}</td>
+                <td class="px-3 py-0 font-mono whitespace-pre text-gray-800">{{ line | safe }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<div class="mb-6"></div>
+
+<!-- Replies -->
+<div class="border-t border-gray-100 pt-5">
+    {% if replies %}
+    <div class="space-y-4 mb-5">
+        {% for reply in replies %}
+        <div class="flex gap-3">
+            <div class="shrink-0 mt-0.5">
+                <img src="/avatar/{{ reply.did }}" alt="" class="w-5 h-5 rounded-full bg-gray-100">
+            </div>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 mb-0.5">
+                    <a href="{{ url_for('list_bites', identifier=reply.did) }}"
+                       class="text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors">{{ reply.handle or reply.did }}</a>
+                    <span class="text-xs text-gray-400">{{ reply.created_at | humandate }}</span>
+                </div>
+                <p class="text-sm text-gray-700 leading-relaxed">{{ reply.text }}</p>
+                {% if g.user and g.user.did == reply.did and reply.rkey %}
+                <form method="post" action="{{ url_for('delete_reply', identifier=did, rkey=at_uri.split('/')[-1]) }}" class="mt-1">
+                    <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+                    <input type="hidden" name="reply_rkey" value="{{ reply.rkey }}">
+                    <button type="submit" class="text-xs text-gray-400 hover:text-red-500 transition-colors">delete</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if g.user %}
+    <form method="post" action="{{ url_for('create_reply', identifier=did, rkey=paste_id.split('/')[-1]) }}">
+        <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+        <input type="hidden" name="at_uri" value="{{ at_uri }}">
+        <input type="hidden" name="cid" value="{{ cid }}">
+        <div class="flex gap-3">
+            <div class="shrink-0 mt-1">
+                <img src="/avatar/{{ g.user.did }}" alt="" class="w-5 h-5 rounded-full bg-gray-100">
+            </div>
+            <div class="flex-1">
+                <textarea name="text" rows="2" required placeholder="Write a reply..."
+                          class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none"></textarea>
+                <div class="flex justify-end mt-1.5">
+                    <button type="submit"
+                            class="bg-indigo-600 text-white px-3.5 py-1.5 rounded-md hover:bg-indigo-700 text-sm font-medium transition-colors">reply</button>
+                </div>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

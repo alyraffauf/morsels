@@ -1,0 +1,24 @@
+{% if recent %}
+<div class="space-y-2">
+    {% for bite in recent %}
+    <a href="{{ url_for('view_bite', identifier=bite.did, rkey=bite.rkey) }}"
+       class="block border border-gray-200 rounded-md overflow-hidden hover:border-gray-300 transition-colors">
+        <div class="relative flex items-center justify-between px-4 py-2.5">
+            <span class="flex items-center gap-1.5 hover:underline cursor-pointer js-profile-link"
+                  data-href="{{ url_for('list_bites', identifier=bite.did) }}">
+                <img src="/avatar/{{ bite.did }}" alt="" class="w-4 h-4 rounded-full bg-gray-100">
+                <span class="text-xs text-amber-600">{{ bite.handle or bite.did }}</span>
+            </span>
+            <span class="absolute inset-0 flex items-center justify-center text-sm font-medium text-gray-900 pointer-events-none">{{ bite.title }}</span>
+            <span class="text-xs text-gray-400">{{ bite.created_at | humandate }}</span>
+        </div>
+        <!-- prettier-ignore -->
+        <div class="bg-gray-50 border-t border-gray-100 px-4 py-2">
+            <p class="text-xs text-gray-500 font-mono truncate">{{ bite.content[:150] | e }}</p>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<p class="text-center text-sm text-gray-400 py-8">No bites yet.</p>
+{% endif %}

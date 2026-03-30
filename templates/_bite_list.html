@@ -1,0 +1,21 @@
+{% if pastes %}
+<div class="space-y-2">
+    {% for paste in pastes %}
+    <a href="{{ url_for('view_bite', identifier=did, rkey=paste.rkey) }}"
+       class="block border border-gray-200 rounded-md overflow-hidden hover:border-gray-300 transition-colors">
+        <div class="flex items-baseline justify-between gap-3 px-4 py-2.5">
+            <span class="text-sm font-medium text-gray-900 truncate">{{ paste.title }}</span>
+            <span class="text-xs text-gray-400 shrink-0">{{ paste.created_at | humandate }}</span>
+        </div>
+        <!-- prettier-ignore -->
+        <div class="bg-gray-50 border-t border-gray-100 px-4 py-2">
+            <p class="text-xs text-gray-500 font-mono truncate">{{ paste.content[:150] | e }}</p>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12 text-sm text-gray-400">
+    <p>No bites yet.</p>
+</div>
+{% endif %}

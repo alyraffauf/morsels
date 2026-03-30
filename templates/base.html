@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/pygments.css">
+    <title>{% block title %}morsels{% endblock %}</title>
+</head>
+<body class="bg-white text-gray-900 min-h-screen flex flex-col antialiased">
+    <header class="border-b border-gray-200 sticky top-0 bg-white z-10">
+        <div class="max-w-3xl mx-auto px-5 h-12 flex items-center justify-between">
+            <a href="/" class="font-bold text-gray-900 no-underline tracking-tight">morsels</a>
+            <nav class="flex items-center gap-3 text-sm">
+                {% if g.user %}
+                <button onclick="document.getElementById('compose-dialog').showModal()"
+                        class="bg-indigo-600 text-white px-3 py-1 rounded-md hover:bg-indigo-700 text-xs font-medium transition-colors flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    share
+                </button>
+                <a href="{{ url_for('list_bites', identifier=g.user.did) }}"
+                   class="text-gray-500 hover:text-gray-900 transition-colors">
+                    <img src="/avatar/{{ g.user.did }}" alt="" class="w-6 h-6 rounded-full bg-gray-100">
+                </a>
+                <a href="{{ url_for('oauth_logout') }}"
+                   class="text-gray-400 hover:text-gray-600 transition-colors">log out</a>
+                {% else %}
+                <button onclick="document.getElementById('login-dialog').showModal()"
+                        class="bg-indigo-600 text-white px-3 py-1 rounded-md hover:bg-indigo-700 text-xs font-medium transition-colors">log in</button>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main class="flex-1">
+        <div class="max-w-3xl mx-auto px-5 py-5">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="mb-4 px-3 py-2 rounded-md text-sm
+                    {% if category == 'error' %}bg-red-50 text-red-800 border border-red-200
+                    {% else %}bg-green-50 text-green-800 border border-green-200{% endif %}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <footer class="border-t border-gray-100 py-6">
+        <div class="max-w-3xl mx-auto px-5 text-xs text-gray-400 text-center">
+            <p>made by <a href="https://aly.codes" class="text-amber-600 hover:text-amber-700 transition-colors">@aly.codes</a></p>
+        </div>
+    </footer>
+
+    <!-- Login dialog -->
+    {% if not g.user %}
+    <dialog id="login-dialog"
+            class="bg-white rounded-xl shadow-xl border border-gray-200 p-0 backdrop:bg-gray-900/40 max-w-sm w-full">
+        <form method="post" action="{{ url_for('oauth_login') }}" class="p-4">
+            <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-xs text-gray-400">log in with your handle</p>
+                <button type="button" onclick="document.getElementById('login-dialog').close()"
+                        class="text-gray-400 hover:text-gray-600 transition-colors ml-3 shrink-0" aria-label="Close">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="flex gap-2">
+                <input type="text" name="username" id="username" placeholder="you.bsky.social" required aria-label="Handle"
+                       class="flex-1 min-w-0 px-3 py-1.5 bg-white border border-gray-300 rounded-md text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                <button type="submit"
+                        class="bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 text-xs font-medium transition-colors shrink-0">
+                    &rarr;
+                </button>
+            </div>
+        </form>
+    </dialog>
+    {% endif %}
+
+    <!-- Compose dialog -->
+    {% if g.user %}
+    <dialog id="compose-dialog"
+            class="bg-white rounded-xl shadow-xl border border-gray-200 p-0 backdrop:bg-gray-900/40 max-w-lg w-full">
+        <form method="post" action="{{ url_for('create_bite') }}" class="p-0">
+            <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <div class="flex items-center gap-2">
+                    <img src="/avatar/{{ g.user.did }}" alt="" class="w-5 h-5 rounded-full bg-gray-100">
+                    <span class="text-xs text-amber-600">{{ session.user_handle }}</span>
+                </div>
+                <button type="button" onclick="document.getElementById('compose-dialog').close()"
+                        class="text-gray-400 hover:text-gray-600 transition-colors" aria-label="Close">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="px-4 py-3 border-b border-gray-100">
+                <input type="text" name="title" placeholder="title (optional)"
+                       class="w-full text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent border-0 p-0 focus:outline-none focus:ring-0">
+            </div>
+            <!-- prettier-ignore -->
+            <div class="bg-gray-50">
+                <textarea name="content" rows="12" required autofocus placeholder="Paste or type something..."
+                          class="w-full px-4 py-3 bg-transparent border-0 text-sm text-gray-800 font-mono placeholder-gray-400 focus:outline-none focus:ring-0 leading-6 resize-none"></textarea>
+            </div>
+            <div class="flex justify-end px-4 py-3 border-t border-gray-100">
+                <button type="submit"
+                        class="bg-indigo-600 text-white px-4 py-1.5 rounded-md hover:bg-indigo-700 text-sm font-medium transition-colors">
+                    share
+                </button>
+            </div>
+        </form>
+    </dialog>
+    {% endif %}
+
+    <script>
+    // Profile links inside card links
+    document.addEventListener('click', function(e) {
+        var link = e.target.closest('.js-profile-link');
+        if (link) {
+            e.preventDefault();
+            e.stopPropagation();
+            window.location = link.dataset.href;
+        }
+    });
+    // Ctrl/Cmd+Enter to submit
+    document.addEventListener('keydown', function(e) {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            var ta = document.activeElement;
+            if (ta && ta.tagName === 'TEXTAREA') {
+                ta.closest('form').requestSubmit();
+            }
+        }
+    });
+    // Close dialogs on backdrop click, autofocus first input on open
+    document.querySelectorAll('dialog').forEach(function(dialog) {
+        dialog.addEventListener('click', function(e) {
+            if (e.target === dialog) dialog.close();
+        });
+        var obs = new MutationObserver(function() {
+            if (dialog.open) {
+                var input = dialog.querySelector('input[type="text"], textarea');
+                if (input) input.focus();
+            }
+        });
+        obs.observe(dialog, { attributes: true, attributeFilter: ['open'] });
+    });
+    </script>
+</body>
+</html>
