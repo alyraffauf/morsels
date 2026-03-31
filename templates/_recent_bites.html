@@ -7,7 +7,7 @@
             <div class="flex items-center justify-between mb-1">
                 <span class="flex items-center gap-1.5 hover:underline cursor-pointer js-profile-link"
                       data-href="{{ url_for('list_bites', identifier=bite.did) }}">
-                    <img src="{{ bite.avatar_url }}" onerror="this.onerror=null;this.src='/avatar/{{ bite.did }}'" alt="" class="w-4 h-4 rounded-full bg-gray-100">
+                    <img src="{{ bite.avatar_url }}" onerror="this.onerror=null;this.src='/avatar/{{ bite.did }}'" alt="" loading="lazy" class="w-4 h-4 rounded-full bg-gray-100">
                     <span class="text-xs text-amber-600">{{ bite.handle or bite.did }}</span>
                 </span>
                 <span class="text-xs text-gray-400">{{ bite.created_at | humandate }}</span>
