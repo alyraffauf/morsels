@@ -116,6 +116,17 @@
     {% endif %}
 
     <script>
+    // Convert UTC timestamps to local timezone
+    document.querySelectorAll('.js-localtime').forEach(function(el) {
+        var dt = new Date(el.getAttribute('datetime'));
+        if (!isNaN(dt)) {
+            var h = dt.getHours();
+            var ampm = h >= 12 ? 'pm' : 'am';
+            h = h % 12 || 12;
+            var months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+            el.textContent = months[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear() + ' at ' + h + ':' + String(dt.getMinutes()).padStart(2,'0') + ' ' + ampm;
+        }
+    });
     // Profile links inside card links
     document.addEventListener('click', function(e) {
         var link = e.target.closest('.js-profile-link');

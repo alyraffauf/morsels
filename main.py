@@ -30,6 +30,7 @@ from flask import (
     session,
     url_for,
 )
+from markupsafe import Markup
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import TextLexer, guess_lexer
@@ -309,9 +310,12 @@ def load_logged_in_user() -> None:
 
 @app.template_filter("humandate")
 def humandate_filter(value: str) -> str:
+    """Return a <time> element that JS will convert to the viewer's local timezone."""
     try:
         dt = datetime.fromisoformat(value)
-        return dt.strftime("%b %-d, %Y at %-I:%M %p").lower()
+        iso = dt.isoformat()
+        fallback = dt.strftime("%b %-d, %Y at %-I:%M %p").lower()
+        return Markup(f'<time datetime="{iso}" class="js-localtime">{fallback}</time>')
     except Exception:
         return value
 
