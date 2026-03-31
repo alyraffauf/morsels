@@ -532,13 +532,17 @@ def oauth_callback() -> WerkzeugResponse:
         return redirect(url_for("index"))
 
     client_id, redirect_uri = compute_client_id(request.url_root)
-    tokens, dpop_authserver_nonce = initial_token_request(
-        row,
-        code,
-        client_id,
-        redirect_uri,
-        CLIENT_SECRET_JWK,
-    )
+    try:
+        tokens, dpop_authserver_nonce = initial_token_request(
+            row,
+            code,
+            client_id,
+            redirect_uri,
+            CLIENT_SECRET_JWK,
+        )
+    except Exception:
+        flash("Login failed — could not complete token exchange. Try again.", "error")
+        return redirect(url_for("index"))
 
     if row["did"]:  # type: ignore[index]
         did, handle, pds_url = row["did"], row["handle"], row["pds_url"]  # type: ignore[index]
