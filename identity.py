@@ -85,11 +85,13 @@ def fetch_profile(did: str, pds_url: str) -> dict[str, str | None]:
     except requests.RequestException, ValueError:
         return {}
 
+    avatar_url = None
     avatar_blob_url = None
     avatar = value.get("avatar")
     if avatar and isinstance(avatar, dict):
         cid = avatar.get("ref", {}).get("$link")
         if cid:
+            avatar_url = f"https://cdn.bsky.app/img/avatar/plain/{did}/{cid}@webp"
             avatar_blob_url = (
                 f"{pds_url}/xrpc/com.atproto.sync.getBlob?did={did}&cid={cid}"
             )
@@ -98,7 +100,7 @@ def fetch_profile(did: str, pds_url: str) -> dict[str, str | None]:
         "display_name": value.get("displayName"),
         "description": value.get("description"),
         "pronouns": value.get("pronouns"),
-        "avatar_url": f"/avatar/{did}" if avatar_blob_url else None,
+        "avatar_url": avatar_url,
         "avatar_blob_url": avatar_blob_url,
     }
     _profile_cache[did] = (profile, now)
@@ -130,25 +132,35 @@ def fetch_recent_bites(limit: int = 5) -> list[dict[str, str | None]]:
     dids = [item.get("did", "") for item in raw]
     unique_dids = list(set(d for d in dids if d))
     with ThreadPoolExecutor(max_workers=5) as pool:
-        results = dict(zip(unique_dids, pool.map(resolve_identity, unique_dids)))
+        identity_results = dict(zip(unique_dids, pool.map(resolve_identity, unique_dids)))
+
+    # Fetch profiles in parallel too (for avatar URLs)
+    def _fetch_profile_for_did(did: str) -> dict[str, str | None]:
+        handle, pds_url = identity_results.get(did, (None, None))
+        if pds_url:
+            return fetch_profile(did, pds_url)
+        return {}
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        profile_results = dict(zip(unique_dids, pool.map(_fetch_profile_for_did, unique_dids)))
 
     bites = []
     for item in raw:
         record = item.get("record", {})
         did = item.get("did", "")
-        handle, _ = results.get(did, (None, None))
+        handle, _ = identity_results.get(did, (None, None))
+        profile = profile_results.get(did, {})
         try:
-            bites.append(
-                {
-                    "did": did,
-                    "handle": handle,
-                    "rkey": item.get("rkey", ""),
-                    "title": record["title"],
-                    "content": record["content"],
-                    "created_at": record.get("createdAt", ""),
-                }
-            )
-        except KeyError, TypeError:
+            bites.append({
+                "did": did,
+                "handle": handle,
+                "rkey": item.get("rkey", ""),
+                "title": record["title"],
+                "content": record["content"],
+                "created_at": record.get("createdAt", ""),
+                "avatar_url": profile.get("avatar_url") or f"/avatar/{did}",
+            })
+        except (KeyError, TypeError):
             continue
 
     _recent_bites_cache = (bites, now)
