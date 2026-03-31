@@ -122,7 +122,7 @@ def fetch_recent_bites(limit: int = 5) -> list[dict[str, str | None]]:
         )
         if resp.status_code != 200:
             return []
-        raw = resp.json()
+        raw = resp.json()[:limit]
     except requests.RequestException, ValueError:
         return []
 
