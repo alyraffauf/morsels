@@ -1,4 +1,4 @@
-[![Build](https://github.com/alyraffauf/morsel/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/alyraffauf/morsel/actions/workflows/build.yml) [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0) [![Ko-fi](https://img.shields.io/badge/Donate-Ko--fi-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/alyraffauf)
+[![Build](https://github.com/alyraffauf/morsels/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/alyraffauf/morsels/actions/workflows/build.yml) [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0) [![Ko-fi](https://img.shields.io/badge/Donate-Ko--fi-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/alyraffauf)
 
 <div align="center">
   <h1>morsels</h1>
@@ -20,13 +20,13 @@
 ### Docker (recommended)
 
 ```bash
-docker run -d -p 8000:8000 -v morsel-data:/data ghcr.io/alyraffauf/morsel:latest
+docker run -d -p 8000:8000 -v morsel-data:/data ghcr.io/alyraffauf/morsels:latest
 ```
 
 Or with Docker Compose:
 
 ```bash
-git clone https://github.com/alyraffauf/morsel.git
+git clone https://github.com/alyraffauf/morsels.git
 cd morsel
 docker compose up -d
 ```
@@ -38,7 +38,7 @@ Visit `http://localhost:8000`. First run auto-generates secrets.
 Requires Python 3.14+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/alyraffauf/morsel.git
+git clone https://github.com/alyraffauf/morsels.git
 cd morsel
 uv sync
 uv run flask --app main run --debug
