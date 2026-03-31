@@ -242,7 +242,11 @@ def authed_pds_request(
     did = g.user["did"]
     url = f"{pds_url}/xrpc/{path}"
 
-    resp = pds_authed_req(method, url, user=g.user, db=get_db(), body=body)
+    try:
+        resp = pds_authed_req(method, url, user=g.user, db=get_db(), body=body)
+    except Exception:
+        flash("Request timed out. Try again.", "error")
+        return redirect(request.referrer or url_for("index"))
 
     if resp.status_code == 401:  # type: ignore[union-attr]
         client_id, _ = compute_client_id(request.url_root)
