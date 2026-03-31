@@ -453,16 +453,20 @@ def oauth_login() -> WerkzeugResponse | str:
     dpop_private_jwk = JsonWebKey.generate_key("EC", "P-256", is_private=True)
     client_id, redirect_uri = compute_client_id(request.url_root)
 
-    pkce_verifier, state, dpop_authserver_nonce, resp = send_par_auth_request(
-        authserver_url,
-        authserver_meta,
-        username,
-        client_id,
-        redirect_uri,
-        OAUTH_SCOPE,
-        CLIENT_SECRET_JWK,
-        dpop_private_jwk,
-    )
+    try:
+        pkce_verifier, state, dpop_authserver_nonce, resp = send_par_auth_request(
+            authserver_url,
+            authserver_meta,
+            username,
+            client_id,
+            redirect_uri,
+            OAUTH_SCOPE,
+            CLIENT_SECRET_JWK,
+            dpop_private_jwk,
+        )
+    except Exception:
+        flash("Login request timed out. Try again.", "error")
+        return redirect(url_for("index"))
 
     if resp.status_code != 201:
         flash("Login request failed. Try again later.", "error")
