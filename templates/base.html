@@ -62,7 +62,7 @@
     <!-- Login dialog -->
     {% if not g.user %}
     <dialog id="login-dialog"
-            class="bg-white rounded-xl shadow-xl border border-gray-200 p-0 backdrop:bg-gray-900/40 max-w-sm w-full">
+            class="bg-white rounded-xl shadow-xl border border-gray-200 p-0 backdrop:bg-gray-900/40 max-w-sm w-full fixed inset-0 m-auto h-fit z-50">
         <form method="post" action="{{ url_for('oauth_login') }}" class="p-4">
             <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
             <div class="flex items-center justify-between mb-3">
@@ -87,7 +87,7 @@
     <!-- Compose dialog -->
     {% if g.user %}
     <dialog id="compose-dialog"
-            class="bg-white rounded-xl shadow-xl border border-gray-200 p-0 backdrop:bg-gray-900/40 max-w-lg w-full">
+            class="bg-white rounded-xl shadow-xl border border-gray-200 p-0 backdrop:bg-gray-900/40 max-w-lg w-full fixed inset-0 m-auto h-fit">
         <form method="post" action="{{ url_for('create_bite') }}" class="p-0">
             <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
             <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
