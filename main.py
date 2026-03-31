@@ -69,7 +69,10 @@ COLLECTION = "blue.morsels.bite"
 SLINGSHOT_URL = "https://slingshot.microcosm.blue"
 
 _avatar_cache: dict[str, tuple[bytes, str, float]] = {}
-AVATAR_TTL = 1800  # 30mins
+AVATAR_TTL = 3600
+
+_bite_cache: dict[str, tuple[Any, float]] = {}
+BITE_TTL = 3600
 
 # =============================================================================
 # Database
@@ -580,6 +583,18 @@ def oauth_logout() -> WerkzeugResponse:
 def index() -> str:
     recent = fetch_recent_bites(limit=5)
 
+    # Pre-populate bite cache from feed data
+    now = time.time()
+    for bite in recent:
+        key = f"{bite.get('did')}/{bite.get('rkey')}"
+        if key not in _bite_cache:
+            _bite_cache[key] = ({
+                "title": bite.get("title", "Untitled"),
+                "content": bite.get("content", ""),
+                "created_at": bite.get("created_at", ""),
+                "cid": "",
+            }, now)
+
     if g.user:
         return render_template(
             "create.html", recent=recent, did=g.user["did"], handle=g.user["handle"]
@@ -644,21 +659,43 @@ def view_bite(identifier: str, rkey: str) -> WerkzeugResponse | str:
         return result
     did, handle, pds_url, profile = result
 
-    try:
-        client = Client(SLINGSHOT_URL)
-        response = client.com.atproto.repo.get_record(
-            models.ComAtprotoRepoGetRecord.Params(
-                repo=did,
-                collection=COLLECTION,
-                rkey=rkey,
+    cache_key = f"{did}/{rkey}"
+    now = time.time()
+    bite = None
+    if cache_key in _bite_cache:
+        cached, ts = _bite_cache[cache_key]
+        if now - ts < BITE_TTL:
+            bite = cached
+
+    if bite is None:
+        try:
+            client = Client(SLINGSHOT_URL)
+            response = client.com.atproto.repo.get_record(
+                models.ComAtprotoRepoGetRecord.Params(
+                    repo=did,
+                    collection=COLLECTION,
+                    rkey=rkey,
+                )
             )
-        )
-    except BadRequestError:
-        abort(404, "Bite not found.")
-    except NetworkError:
-        abort(502, "Could not reach this user's server.")
-    except Exception:
-        abort(500, "Something went wrong loading this bite.")
+            bite = {
+                "title": response.value["title"] or "Untitled",
+                "content": response.value["content"] or "",
+                "created_at": response.value["createdAt"] or "",
+                "cid": response.cid,
+            }
+            _bite_cache[cache_key] = (bite, now)
+        except BadRequestError:
+            abort(404, "Bite not found.")
+        except NetworkError:
+            abort(502, "Could not reach this user's server.")
+        except (KeyError, TypeError):
+            abort(500, "This bite has missing or malformed data.")
+        except Exception:
+            abort(500, "Something went wrong loading this bite.")
+
+    title = bite["title"]
+    content = bite["content"]
+    created_at = bite["created_at"]
 
     raw_replies = fetch_replies(did, rkey)
     replies = hydrate_replies(raw_replies)
@@ -673,14 +710,6 @@ def view_bite(identifier: str, rkey: str) -> WerkzeugResponse | str:
         if not already_indexed:
             replies.insert(0, pending)
 
-    try:
-        title: str = response.value["title"] or "Untitled"
-        content: str = response.value["content"] or ""
-        created_at: str = response.value["createdAt"] or ""
-    except KeyError, TypeError:
-        abort(500, "This bite has missing or malformed data.")
-        return ""  # unreachable, satisfies type checker
-
     return render_template(
         "view.html",
         title=title,
@@ -692,7 +721,7 @@ def view_bite(identifier: str, rkey: str) -> WerkzeugResponse | str:
         profile=profile,
         created_at=created_at,
         at_uri=f"at://{did}/{COLLECTION}/{rkey}",
-        cid=response.cid,
+        cid=bite.get("cid", ""),
         replies=replies,
     )
 
@@ -756,6 +785,7 @@ def delete_bite(identifier: str, rkey: str) -> WerkzeugResponse:
     if isinstance(resp, WerkzeugResponse):
         return resp
 
+    _bite_cache.pop(f"{g.user['did']}/{rkey}", None)
     flash("Bite deleted.")
     return redirect(url_for("list_bites", identifier=g.user["did"]))
 
