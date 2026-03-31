@@ -4,28 +4,30 @@
 
 {% block content %}
 <div class="border border-gray-200 rounded-md overflow-hidden shadow-sm">
-    <div class="relative flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
-        <div class="flex items-center gap-1.5">
-            <a href="{{ url_for('list_bites', identifier=did) }}">
-                {% if profile.avatar_url %}
-                <img src="{{ profile.avatar_url }}" alt="" class="w-4 h-4 rounded-full">
-                {% else %}
-                <div class="w-4 h-4 rounded-full bg-gray-100"></div>
-                {% endif %}
-            </a>
-            <a href="{{ url_for('list_bites', identifier=did) }}"
-               class="text-xs text-amber-600 hover:text-amber-700 transition-colors">{{ handle or did }}</a>
-        </div>
-        <span class="absolute inset-0 flex items-center justify-center text-sm font-medium text-gray-900 pointer-events-none">{{ title }}</span>
-        <div class="flex items-baseline gap-2">
-            <span class="text-xs text-gray-400">{{ created_at | humandate }}</span>
+    <div class="px-4 py-2.5 border-b border-gray-100">
+        <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center gap-1.5">
+                <a href="{{ url_for('list_bites', identifier=did) }}">
+                    {% if profile.avatar_url %}
+                    <img src="{{ profile.avatar_url }}" alt="" class="w-4 h-4 rounded-full">
+                    {% else %}
+                    <div class="w-4 h-4 rounded-full bg-gray-100"></div>
+                    {% endif %}
+                </a>
+                <a href="{{ url_for('list_bites', identifier=did) }}"
+                   class="text-xs text-amber-600 hover:text-amber-700 transition-colors">{{ handle or did }}</a>
+            </div>
+            <div class="flex items-baseline gap-2">
+                <span class="text-xs text-gray-400">{{ created_at | humandate }}</span>
             {% if g.user and g.user.did == did %}
             <form method="post" action="{{ url_for('delete_bite', identifier=did, rkey=at_uri.split('/')[-1]) }}" class="inline leading-none">
                 <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
                 <button type="submit" class="text-xs text-gray-400 hover:text-red-500 transition-colors leading-none p-0">delete</button>
             </form>
             {% endif %}
+            </div>
         </div>
+        <p class="text-sm font-medium text-gray-900">{{ title }}</p>
     </div>
     <!-- prettier-ignore -->
     <div class="highlight bg-gray-50 overflow-x-auto">
