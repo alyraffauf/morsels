@@ -2,7 +2,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
-from atproto_identity.resolver import IdResolver
 
 CONSTELLATION_URL = "https://constellation.microcosm.blue"
 SLINGSHOT_URL = "https://slingshot.microcosm.blue"
@@ -18,39 +17,45 @@ _recent_bites_ttl = 60
 
 
 def resolve_did(identifier: str) -> str | None:
-    """Resolve a handle to a DID. Returns the DID, or None if resolution fails."""
+    """Resolve a handle to a DID via Slingshot. Returns the DID, or None if resolution fails."""
     if identifier.startswith("did:"):
         return identifier
-    resolver = IdResolver()
-    return resolver.handle.resolve(identifier)
+    try:
+        resp = requests.get(
+            f"{SLINGSHOT_URL}/xrpc/com.atproto.identity.resolveHandle",
+            params={"handle": identifier},
+            timeout=5,
+        )
+        if resp.status_code != 200:
+            return None
+        return resp.json().get("did")
+    except (requests.RequestException, ValueError):
+        return None
 
 
 def resolve_identity(did: str) -> tuple[str | None, str | None]:
-    """Resolve a DID to its handle and PDS URL."""
+    """Resolve a DID to its handle and PDS URL via Slingshot."""
     now = time.time()
     if did in _identity_cache:
         result, ts = _identity_cache[did]
         if now - ts < _identity_ttl:
             return result
 
-    resolver = IdResolver()
-    did_doc = resolver.did.resolve(did)
-
-    if did_doc is None:
-        _identity_cache[did] = ((None, None), now)
+    try:
+        resp = requests.get(
+            f"{SLINGSHOT_URL}/xrpc/blue.microcosm.identity.resolveMiniDoc",
+            params={"identifier": did},
+            timeout=5,
+        )
+        if resp.status_code != 200:
+            _identity_cache[did] = ((None, None), now)
+            return None, None
+        data = resp.json()
+    except (requests.RequestException, ValueError):
         return None, None
 
-    handle = None
-    for aka in did_doc.also_known_as:  # type: ignore[union-attr]
-        if aka.startswith("at://"):
-            handle = aka[5:]
-            break
-
-    pds_url = None
-    for service in did_doc.service:  # type: ignore[union-attr]
-        if service.id == "#atproto_pds":
-            pds_url = service.service_endpoint
-            break
+    handle = data.get("handle")
+    pds_url = data.get("pds")
 
     _identity_cache[did] = ((handle, pds_url), now)
     return handle, pds_url
