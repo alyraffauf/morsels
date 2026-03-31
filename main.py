@@ -409,7 +409,9 @@ def oauth_jwks() -> WerkzeugResponse:
 @app.route("/pygments.css")
 def pygments_css() -> WerkzeugResponse:
     css = HtmlFormatter(style="default").get_style_defs()
-    return Response(css, mimetype="text/css")
+    resp = Response(css, mimetype="text/css")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 
 # =============================================================================
