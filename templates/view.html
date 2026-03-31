@@ -9,7 +9,7 @@
             <div class="flex items-center gap-1.5">
                 <a href="{{ url_for('list_bites', identifier=did) }}">
                     {% if profile.avatar_url %}
-                    <img src="{{ profile.avatar_url }}" alt="" class="w-4 h-4 rounded-full">
+                    <img src="{{ profile.avatar_url }}" onerror="this.onerror=null;this.src='/avatar/{{ did }}'" alt="" class="w-4 h-4 rounded-full">
                     {% else %}
                     <div class="w-4 h-4 rounded-full bg-gray-100"></div>
                     {% endif %}

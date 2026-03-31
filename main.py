@@ -128,14 +128,23 @@ def avatar_proxy(did: str) -> WerkzeugResponse:
         return Response(status=404)
 
     profile = fetch_profile(did, pds_url)
-    avatar_url = profile.get("avatar_blob_url")
-    if not avatar_url:
+    cdn_url = profile.get("avatar_url")
+    blob_url = profile.get("avatar_blob_url")
+    if not cdn_url and not blob_url:
         return Response(status=404)
 
-    try:
-        resp = requests.get(avatar_url, timeout=5)
-        resp.raise_for_status()
-    except requests.RequestException, ValueError:
+    resp = None
+    for url in [cdn_url, blob_url]:
+        if not url:
+            continue
+        try:
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                break
+        except (requests.RequestException, ValueError):
+            continue
+
+    if resp is None or resp.status_code != 200:
         return Response(status=502)
 
     content_type = resp.headers.get("Content-Type", "image/jpeg")

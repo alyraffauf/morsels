@@ -6,7 +6,7 @@
 <!-- Profile card -->
 <div class="flex items-center gap-3 mb-6 pb-5 border-b border-gray-100">
     {% if profile.avatar_url %}
-    <img src="{{ profile.avatar_url }}" alt="" class="w-12 h-12 rounded-full">
+    <img src="{{ profile.avatar_url }}" onerror="this.onerror=null;this.src='/avatar/{{ did }}'" alt="" class="w-12 h-12 rounded-full">
     {% else %}
     <div class="w-12 h-12 rounded-full bg-gray-100"></div>
     {% endif %}
