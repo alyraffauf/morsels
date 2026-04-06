@@ -236,7 +236,7 @@ def fetch_bites(pds_url: str, did: str, limit: int = 100) -> list[dict[str, str]
     return bites
 
 
-def authed_pds_request(
+async def authed_pds_request(
     method: str, path: str, body: dict | None = None
 ) -> WerkzeugResponse | requests.Response | None:
     """Make an authenticated request to the logged-in user's PDS, refreshing tokens if needed.
@@ -278,7 +278,7 @@ def authed_pds_request(
     return resp
 
 
-def delete_record(
+async def delete_record(
     collection: str, record_rkey: str
 ) -> WerkzeugResponse | requests.Response | None:
     """Delete a record from the logged-in user's repo."""
@@ -287,7 +287,7 @@ def delete_record(
         "collection": collection,
         "rkey": record_rkey,
     }
-    return authed_pds_request("POST", "com.atproto.repo.deleteRecord", body=body)
+    return await authed_pds_request("POST", "com.atproto.repo.deleteRecord", body=body)
 
 
 async def check_csrf() -> None:
@@ -656,7 +656,7 @@ async def create_bite() -> WerkzeugResponse | str:
         },
     }
 
-    resp = authed_pds_request("POST", "com.atproto.repo.createRecord", body=body)
+    resp = await authed_pds_request("POST", "com.atproto.repo.createRecord", body=body)
     if isinstance(resp, WerkzeugResponse):
         return resp
     if resp is None or resp.status_code not in [200, 201]:
@@ -785,7 +785,7 @@ async def create_reply(identifier: str, rkey: str) -> WerkzeugResponse:
         },
     }
 
-    resp = authed_pds_request("POST", "com.atproto.repo.createRecord", body=body)
+    resp = await authed_pds_request("POST", "com.atproto.repo.createRecord", body=body)
     if isinstance(resp, WerkzeugResponse):
         return resp
 
@@ -813,7 +813,7 @@ async def delete_bite(identifier: str, rkey: str) -> WerkzeugResponse:
     if await resolve_did(identifier) != g.user["did"]:
         abort(403, "You can only delete your own bites.")
 
-    resp = delete_record(COLLECTION, rkey)
+    resp = await delete_record(COLLECTION, rkey)
     if isinstance(resp, WerkzeugResponse):
         return resp
 
@@ -832,7 +832,7 @@ async def delete_reply(identifier: str, rkey: str) -> WerkzeugResponse:
     if not reply_rkey:
         abort(400)
 
-    resp = delete_record("blue.morsels.reply", reply_rkey)
+    resp = await delete_record("blue.morsels.reply", reply_rkey)
     if isinstance(resp, WerkzeugResponse):
         return resp
 
