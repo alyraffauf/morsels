@@ -31,4 +31,4 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["uv", "run", "hypercorn", "main:app", "--bind", "0.0.0.0:8000", "--workers", "3"]
+CMD ["uv", "run", "hypercorn", "main:app", "--bind", "0.0.0.0:8000"]
