@@ -1,7 +1,7 @@
+import asyncio
 import time
-from concurrent.futures import ThreadPoolExecutor
 
-import requests
+import httpx
 
 CONSTELLATION_URL = "https://constellation.microcosm.blue"
 SLINGSHOT_URL = "https://slingshot.microcosm.blue"
@@ -16,24 +16,25 @@ _recent_bites_cache: tuple[list[dict[str, str | None]], float] | None = None
 _recent_bites_ttl = 60
 
 
-def resolve_did(identifier: str) -> str | None:
-    """Resolve a handle to a DID via Slingshot. Returns the DID, or None if resolution fails."""
+async def resolve_did(identifier: str) -> str | None:
+    """Resolve a handle to a DID via Slingshot."""
     if identifier.startswith("did:"):
         return identifier
     try:
-        resp = requests.get(
-            f"{SLINGSHOT_URL}/xrpc/com.atproto.identity.resolveHandle",
-            params={"handle": identifier},
-            timeout=5,
-        )
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{SLINGSHOT_URL}/xrpc/com.atproto.identity.resolveHandle",
+                params={"handle": identifier},
+                timeout=5,
+            )
         if resp.status_code != 200:
             return None
         return resp.json().get("did")
-    except (requests.RequestException, ValueError):
+    except (httpx.HTTPError, ValueError):
         return None
 
 
-def resolve_identity(did: str) -> tuple[str | None, str | None]:
+async def resolve_identity(did: str) -> tuple[str | None, str | None]:
     """Resolve a DID to its handle and PDS URL via Slingshot."""
     now = time.time()
     if did in _identity_cache:
@@ -42,16 +43,17 @@ def resolve_identity(did: str) -> tuple[str | None, str | None]:
             return result
 
     try:
-        resp = requests.get(
-            f"{SLINGSHOT_URL}/xrpc/blue.microcosm.identity.resolveMiniDoc",
-            params={"identifier": did},
-            timeout=5,
-        )
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{SLINGSHOT_URL}/xrpc/blue.microcosm.identity.resolveMiniDoc",
+                params={"identifier": did},
+                timeout=5,
+            )
         if resp.status_code != 200:
             _identity_cache[did] = ((None, None), now)
             return None, None
         data = resp.json()
-    except (requests.RequestException, ValueError):
+    except (httpx.HTTPError, ValueError):
         return None, None
 
     handle = data.get("handle")
@@ -61,7 +63,7 @@ def resolve_identity(did: str) -> tuple[str | None, str | None]:
     return handle, pds_url
 
 
-def fetch_profile(did: str, pds_url: str) -> dict[str, str | None]:
+async def fetch_profile(did: str, pds_url: str) -> dict[str, str | None]:
     """Fetch a user's Bluesky profile via Slingshot."""
     now = time.time()
     if did in _profile_cache:
@@ -70,19 +72,20 @@ def fetch_profile(did: str, pds_url: str) -> dict[str, str | None]:
             return result
 
     try:
-        resp = requests.get(
-            f"{SLINGSHOT_URL}/xrpc/com.atproto.repo.getRecord",
-            params={
-                "repo": did,
-                "collection": "app.bsky.actor.profile",
-                "rkey": "self",
-            },
-            timeout=5,
-        )
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{SLINGSHOT_URL}/xrpc/com.atproto.repo.getRecord",
+                params={
+                    "repo": did,
+                    "collection": "app.bsky.actor.profile",
+                    "rkey": "self",
+                },
+                timeout=5,
+            )
         if resp.status_code != 200:
             return {}
         value = resp.json().get("value", {})
-    except requests.RequestException, ValueError:
+    except (httpx.HTTPError, ValueError):
         return {}
 
     avatar_url = None
@@ -107,7 +110,7 @@ def fetch_profile(did: str, pds_url: str) -> dict[str, str | None]:
     return profile
 
 
-def fetch_recent_bites(limit: int = 5) -> list[dict[str, str | None]]:
+async def fetch_recent_bites(limit: int = 5) -> list[dict[str, str | None]]:
     """Fetch the most recent bites network-wide from UFOs."""
     global _recent_bites_cache
     now = time.time()
@@ -117,32 +120,34 @@ def fetch_recent_bites(limit: int = 5) -> list[dict[str, str | None]]:
             return cached[:limit]
 
     try:
-        resp = requests.get(
-            f"{UFOS_API_URL}/records",
-            params={"collection": "blue.morsels.bite", "limit": limit},
-            timeout=5,
-        )
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{UFOS_API_URL}/records",
+                params={"collection": "blue.morsels.bite", "limit": limit},
+                timeout=5,
+            )
         if resp.status_code != 200:
             return []
         raw = resp.json()[:limit]
-    except requests.RequestException, ValueError:
+    except (httpx.HTTPError, ValueError):
         return []
 
-    # Resolve all identities in parallel
+    # Resolve all identities concurrently
     dids = [item.get("did", "") for item in raw]
     unique_dids = list(set(d for d in dids if d))
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        identity_results = dict(zip(unique_dids, pool.map(resolve_identity, unique_dids)))
+    identity_tasks = {did: resolve_identity(did) for did in unique_dids}
+    identity_values = await asyncio.gather(*identity_tasks.values())
+    identity_results = dict(zip(identity_tasks.keys(), identity_values))
 
-    # Fetch profiles in parallel too (for avatar URLs)
-    def _fetch_profile_for_did(did: str) -> dict[str, str | None]:
+    # Fetch profiles concurrently
+    async def _fetch_profile_for_did(did: str) -> tuple[str, dict[str, str | None]]:
         handle, pds_url = identity_results.get(did, (None, None))
         if pds_url:
-            return fetch_profile(did, pds_url)
-        return {}
+            return did, await fetch_profile(did, pds_url)
+        return did, {}
 
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        profile_results = dict(zip(unique_dids, pool.map(_fetch_profile_for_did, unique_dids)))
+    profile_values = await asyncio.gather(*[_fetch_profile_for_did(d) for d in unique_dids])
+    profile_results = dict(profile_values)
 
     bites = []
     for item in raw:
@@ -167,62 +172,63 @@ def fetch_recent_bites(limit: int = 5) -> list[dict[str, str | None]]:
     return bites
 
 
-def fetch_replies(did: str, rkey: str) -> list[dict[str, str]]:
+async def fetch_replies(did: str, rkey: str) -> list[dict[str, str]]:
     """Fetch reply backlinks from Constellation."""
     at_uri = f"at://{did}/blue.morsels.bite/{rkey}"
 
     try:
-        resp = requests.get(
-            f"{CONSTELLATION_URL}/xrpc/blue.microcosm.links.getBacklinks",
-            params={
-                "subject": at_uri,
-                "source": "blue.morsels.reply:subject.uri",
-                "limit": 100,
-            },
-            timeout=5,
-        )
-        if resp.status_code != 200:
-            return []
-        return resp.json().get("records", [])
-    except requests.RequestException, ValueError:
-        return []
-
-
-def hydrate_replies(records: list[dict[str, str]]) -> list[dict[str, str | None]]:
-    """Fetch reply record contents from Slingshot."""
-    replies: list[dict[str, str | None]] = []
-    for record in records:
-        did = record.get("did")
-        rkey = record.get("rkey")
-        if not did or not rkey:
-            continue
-
-        try:
-            resp = requests.get(
-                f"{SLINGSHOT_URL}/xrpc/com.atproto.repo.getRecord",
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{CONSTELLATION_URL}/xrpc/blue.microcosm.links.getBacklinks",
                 params={
-                    "repo": did,
-                    "collection": "blue.morsels.reply",
-                    "rkey": rkey,
+                    "subject": at_uri,
+                    "source": "blue.morsels.reply:subject.uri",
+                    "limit": 100,
                 },
                 timeout=5,
             )
+        if resp.status_code != 200:
+            return []
+        return resp.json().get("records", [])
+    except (httpx.HTTPError, ValueError):
+        return []
+
+
+async def hydrate_replies(records: list[dict[str, str]]) -> list[dict[str, str | None]]:
+    """Fetch reply record contents from Slingshot concurrently."""
+
+    async def _hydrate_one(record: dict[str, str]) -> dict[str, str | None] | None:
+        did = record.get("did")
+        rkey = record.get("rkey")
+        if not did or not rkey:
+            return None
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"{SLINGSHOT_URL}/xrpc/com.atproto.repo.getRecord",
+                    params={
+                        "repo": did,
+                        "collection": "blue.morsels.reply",
+                        "rkey": rkey,
+                    },
+                    timeout=5,
+                )
             if resp.status_code != 200:
-                continue
+                return None
             value = resp.json().get("value", {})
-        except requests.RequestException, ValueError:
-            continue
+        except (httpx.HTTPError, ValueError):
+            return None
 
-        handle, _ = resolve_identity(did)
+        handle, _ = await resolve_identity(did)
 
-        replies.append(
-            {
-                "did": did,
-                "handle": handle,
-                "rkey": rkey,
-                "text": value.get("text", ""),
-                "created_at": value.get("createdAt", ""),
-            }
-        )
+        return {
+            "did": did,
+            "handle": handle,
+            "rkey": rkey,
+            "text": value.get("text", ""),
+            "created_at": value.get("createdAt", ""),
+        }
 
-    return replies
+    results = await asyncio.gather(*[_hydrate_one(r) for r in records])
+    return [r for r in results if r is not None]

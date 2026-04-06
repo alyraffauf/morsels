@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
+import httpx
 import regex
 import requests
 from atproto import Client, models
@@ -126,26 +127,27 @@ async def avatar_proxy(did: str) -> WerkzeugResponse:
             return Response(data, mimetype=content_type)
 
     # Resolve PDS to find avatar
-    handle, pds_url = resolve_identity(did)
+    handle, pds_url = await resolve_identity(did)
     if pds_url is None:
         return Response(status=404)
 
-    profile = fetch_profile(did, pds_url)
+    profile = await fetch_profile(did, pds_url)
     cdn_url = profile.get("avatar_url")
     blob_url = profile.get("avatar_blob_url")
     if not cdn_url and not blob_url:
         return Response(status=404)
 
     resp = None
-    for url in [cdn_url, blob_url]:
-        if not url:
-            continue
-        try:
-            resp = requests.get(url, timeout=5)
-            if resp.status_code == 200:
-                break
-        except (requests.RequestException, ValueError):
-            continue
+    async with httpx.AsyncClient() as http:
+        for url in [cdn_url, blob_url]:
+            if not url:
+                continue
+            try:
+                resp = await http.get(url, timeout=5)
+                if resp.status_code == 200:
+                    break
+            except (httpx.HTTPError, ValueError):
+                continue
 
     if resp is None or resp.status_code != 200:
         return Response(status=502)
@@ -176,7 +178,7 @@ def highlight_code(content: str | None) -> str:
     return highlight(content or "", lexer, formatter).rstrip("\n")
 
 
-def require_identity(
+async def require_identity(
     identifier: str, redirect_endpoint: str, **redirect_kwargs: Any
 ) -> tuple[str, str | None, str, dict] | WerkzeugResponse:
     """Resolve an identifier to a DID, redirecting handles to canonical DID URLs.
@@ -184,19 +186,19 @@ def require_identity(
     Returns (did, handle, pds_url, profile) or redirects/aborts.
     Callers must check the return — if it's a Response (redirect), return it directly.
     """
-    did = resolve_did(identifier)
+    did = await resolve_did(identifier)
     if did is None:
         abort(404, "User not found")
     if did != identifier:
         return redirect(url_for(redirect_endpoint, identifier=did, **redirect_kwargs))
 
-    handle, pds_url = resolve_identity(did)
+    handle, pds_url = await resolve_identity(did)
     if handle is None and pds_url is None:
         abort(404, "User not found.")
     if pds_url is None:
         abort(502, "Could not reach this user's server.")
 
-    profile = fetch_profile(did, pds_url)
+    profile = await fetch_profile(did, pds_url)
     return did, handle, pds_url, profile
 
 
@@ -446,12 +448,12 @@ async def oauth_login() -> WerkzeugResponse | str:
     if username.startswith("@"):
         username = username[1:]
 
-    did = resolve_did(username)
+    did = await resolve_did(username)
     if did is None:
         flash("Could not find that account. Check your handle and try again.", "error")
         return redirect(url_for("index"))
 
-    handle, pds_url = resolve_identity(did)
+    handle, pds_url = await resolve_identity(did)
     if pds_url is None:
         flash("Could not reach your server. Try again later.", "error")
         return redirect(url_for("index"))
@@ -611,7 +613,7 @@ async def oauth_logout() -> WerkzeugResponse:
 
 @app.route("/")
 async def index() -> str:
-    recent = fetch_recent_bites(limit=5)
+    recent = await fetch_recent_bites(limit=5)
 
     # Pre-populate bite cache from feed data
     now = time.time()
@@ -666,7 +668,7 @@ async def create_bite() -> WerkzeugResponse | str:
 
 @app.route("/u/<identifier>")
 async def list_bites(identifier: str) -> WerkzeugResponse | str:
-    result = require_identity(identifier, "list_bites")
+    result = await require_identity(identifier, "list_bites")
     if not isinstance(result, tuple):
         return result
     did, handle, pds_url, profile = result
@@ -684,7 +686,7 @@ async def list_bites(identifier: str) -> WerkzeugResponse | str:
 
 @app.route("/b/<path:identifier>/<rkey>")
 async def view_bite(identifier: str, rkey: str) -> WerkzeugResponse | str:
-    result = require_identity(identifier, "view_bite", rkey=rkey)
+    result = await require_identity(identifier, "view_bite", rkey=rkey)
     if not isinstance(result, tuple):
         return result
     did, handle, pds_url, profile = result
@@ -727,8 +729,8 @@ async def view_bite(identifier: str, rkey: str) -> WerkzeugResponse | str:
     content = bite["content"]
     created_at = bite["created_at"]
 
-    raw_replies = fetch_replies(did, rkey)
-    replies = hydrate_replies(raw_replies)
+    raw_replies = await fetch_replies(did, rkey)
+    replies = await hydrate_replies(raw_replies)
 
     pending = session.pop("pending_reply", None)
     if pending:
@@ -808,7 +810,7 @@ async def delete_bite(identifier: str, rkey: str) -> WerkzeugResponse:
         return redirect(url_for("oauth_login"))
     await check_csrf()
 
-    if resolve_did(identifier) != g.user["did"]:
+    if await resolve_did(identifier) != g.user["did"]:
         abort(403, "You can only delete your own bites.")
 
     resp = delete_record(COLLECTION, rkey)
