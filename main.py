@@ -250,7 +250,7 @@ def authed_pds_request(
     try:
         resp = pds_authed_req(method, url, user=g.user, db=get_db(), body=body)
     except Exception:
-        flash("Request timed out. Try again.", "error")
+        await flash("Request timed out. Try again.", "error")
         return redirect(request.referrer or url_for("index"))
 
     if resp.status_code == 401:  # type: ignore[union-attr]
@@ -272,7 +272,7 @@ def authed_pds_request(
             )
             resp = pds_authed_req(method, url, user=g.user, db=get_db(), body=body)
         except Exception:
-            flash("Session expired, please log in again", "error")
+            await flash("Session expired, please log in again", "error")
             return redirect(url_for("oauth_login"))
 
     return resp
@@ -450,24 +450,24 @@ async def oauth_login() -> WerkzeugResponse | str:
 
     did = await resolve_did(username)
     if did is None:
-        flash("Could not find that account. Check your handle and try again.", "error")
+        await flash("Could not find that account. Check your handle and try again.", "error")
         return redirect(url_for("index"))
 
     handle, pds_url = await resolve_identity(did)
     if pds_url is None:
-        flash("Could not reach your server. Try again later.", "error")
+        await flash("Could not reach your server. Try again later.", "error")
         return redirect(url_for("index"))
 
     try:
         authserver_url = resolve_pds_authserver(pds_url)
     except Exception:
-        flash("Could not connect to your login provider. Try again later.", "error")
+        await flash("Could not connect to your login provider. Try again later.", "error")
         return redirect(url_for("index"))
 
     try:
         authserver_meta = fetch_authserver_meta(authserver_url)
     except Exception:
-        flash("Could not connect to your login provider. Try again later.", "error")
+        await flash("Could not connect to your login provider. Try again later.", "error")
         return redirect(url_for("index"))
 
     dpop_private_jwk = JsonWebKey.generate_key("EC", "P-256", is_private=True)
@@ -485,11 +485,11 @@ async def oauth_login() -> WerkzeugResponse | str:
             dpop_private_jwk,
         )
     except Exception:
-        flash("Login request timed out. Try again.", "error")
+        await flash("Login request timed out. Try again.", "error")
         return redirect(url_for("index"))
 
     if resp.status_code != 201:
-        flash("Login request failed. Try again later.", "error")
+        await flash("Login request failed. Try again later.", "error")
         return redirect(url_for("index"))
 
     par_request_uri = resp.json()["request_uri"]
@@ -511,7 +511,7 @@ async def oauth_login() -> WerkzeugResponse | str:
 
     auth_url = authserver_meta["authorization_endpoint"]
     if not is_safe_url(auth_url):
-        flash("Login failed due to a security issue. Try again later.", "error")
+        await flash("Login failed due to a security issue. Try again later.", "error")
         return redirect(url_for("index"))
     qparam = urlencode({"client_id": client_id, "request_uri": par_request_uri})
     return redirect(f"{auth_url}?{qparam}")
@@ -520,7 +520,7 @@ async def oauth_login() -> WerkzeugResponse | str:
 @app.route("/oauth/callback")
 async def oauth_callback() -> WerkzeugResponse:
     if request.args.get("error"):
-        flash("Login was denied or failed. Please try again.", "error")
+        await flash("Login was denied or failed. Please try again.", "error")
         return redirect(url_for("index"))
 
     state = request.args["state"]
@@ -531,13 +531,13 @@ async def oauth_callback() -> WerkzeugResponse:
         "SELECT * FROM oauth_auth_request WHERE state = ?;", [state], one=True
     )
     if row is None:
-        flash("Login session expired. Please try again.", "error")
+        await flash("Login session expired. Please try again.", "error")
         return redirect(url_for("index"))
 
     query_db("DELETE FROM oauth_auth_request WHERE state = ?;", [state])
 
     if row["authserver_iss"] != authserver_iss:  # type: ignore[index]
-        flash("Login failed due to a security issue. Please try again.", "error")
+        await flash("Login failed due to a security issue. Please try again.", "error")
         return redirect(url_for("index"))
 
     client_id, redirect_uri = compute_client_id(request.url_root)
@@ -550,13 +550,13 @@ async def oauth_callback() -> WerkzeugResponse:
             CLIENT_SECRET_JWK,
         )
     except Exception:
-        flash("Login failed — could not complete token exchange. Try again.", "error")
+        await flash("Login failed — could not complete token exchange. Try again.", "error")
         return redirect(url_for("index"))
 
     if row["did"]:  # type: ignore[index]
         did, handle, pds_url = row["did"], row["handle"], row["pds_url"]  # type: ignore[index]
         if tokens["sub"] != did:
-            flash("Login failed — identity mismatch. Please try again.", "error")
+            await flash("Login failed — identity mismatch. Please try again.", "error")
             return redirect(url_for("index"))
     else:
         did = tokens["sub"]
@@ -818,7 +818,7 @@ async def delete_bite(identifier: str, rkey: str) -> WerkzeugResponse:
         return resp
 
     _bite_cache.pop(f"{g.user['did']}/{rkey}", None)
-    flash("Bite deleted.")
+    await flash("Bite deleted.")
     return redirect(url_for("list_bites", identifier=g.user["did"]))
 
 
@@ -836,5 +836,5 @@ async def delete_reply(identifier: str, rkey: str) -> WerkzeugResponse:
     if isinstance(resp, WerkzeugResponse):
         return resp
 
-    flash("Reply deleted.")
+    await flash("Reply deleted.")
     return redirect(url_for("view_bite", identifier=identifier, rkey=rkey))
