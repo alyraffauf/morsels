@@ -17,8 +17,12 @@ from atproto import Client, models
 from atproto_client.exceptions import BadRequestError, NetworkError
 from atproto_identity.resolver import IdResolver
 from authlib.jose import JsonWebKey
-from flask import (
-    Flask,
+from markupsafe import Markup
+from pygments import highlight
+from pygments.formatters import HtmlFormatter
+from pygments.lexers import TextLexer, guess_lexer
+from quart import (
+    Quart,
     Response,
     abort,
     flash,
@@ -30,10 +34,6 @@ from flask import (
     session,
     url_for,
 )
-from markupsafe import Markup
-from pygments import highlight
-from pygments.formatters import HtmlFormatter
-from pygments.lexers import TextLexer, guess_lexer
 from werkzeug.exceptions import HTTPException
 from werkzeug.wrappers import Response as WerkzeugResponse
 
@@ -57,7 +57,7 @@ from identity import (
     resolve_identity,
 )
 
-app = Flask(__name__)
+app = Quart(__name__)
 DATA_DIR = os.environ.get("MORSEL_DATA_DIR", ".")
 load_config(app, data_dir=DATA_DIR)
 
@@ -101,11 +101,14 @@ def query_db(
     return (rv[0] if rv else None) if one else rv
 
 
-with app.app_context():
-    db = get_db()
-    with app.open_resource("schema.sql", mode="r") as f:
-        db.cursor().executescript(f.read())
-    db.commit()
+@app.before_serving
+async def init_db() -> None:
+    async with app.app_context():
+        db = get_db()
+        schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+        with open(schema_path, "r") as f:
+            db.cursor().executescript(f.read())
+        db.commit()
 
 
 # =============================================================================
@@ -114,7 +117,7 @@ with app.app_context():
 
 
 @app.route("/avatar/<path:did>")
-def avatar_proxy(did: str) -> WerkzeugResponse:
+async def avatar_proxy(did: str) -> WerkzeugResponse:
     now = time.time()
 
     if did in _avatar_cache:
@@ -285,9 +288,9 @@ def delete_record(
     return authed_pds_request("POST", "com.atproto.repo.deleteRecord", body=body)
 
 
-def check_csrf() -> None:
+async def check_csrf() -> None:
     token = session.get("csrf_token")
-    submitted = request.form.get("csrf_token")
+    submitted = (await request.form).get("csrf_token")
     if not token or token != submitted:
         abort(400, "Invalid or missing security token. Please try again.")
 
@@ -298,20 +301,20 @@ def check_csrf() -> None:
 
 
 @app.teardown_appcontext
-def close_db(exception: BaseException | None) -> None:
+async def close_db(exception: BaseException | None) -> None:
     db = g.pop("db", None)
     if db is not None:
         db.close()
 
 
 @app.before_request
-def ensure_csrf_token() -> None:
+async def ensure_csrf_token() -> None:
     if "csrf_token" not in session:
         session["csrf_token"] = secrets.token_hex(32)
 
 
 @app.before_request
-def load_logged_in_user() -> None:
+async def load_logged_in_user() -> None:
     user_did = session.get("user_did")
     if user_did is None:
         g.user = None
@@ -339,52 +342,52 @@ def humandate_filter(value: str) -> str:
 
 
 @app.errorhandler(403)
-def forbidden(e: HTTPException) -> tuple[str, int]:
+async def forbidden(e: HTTPException) -> tuple[str, int]:
     message = (
         e.description
         if e.description != "Forbidden"
         else "You don't have permission to do that."
     )
-    return render_template("error.html", code=403, message=message), 403
+    return await render_template("error.html", code=403, message=message), 403
 
 
 @app.errorhandler(400)
-def bad_request(e: HTTPException) -> tuple[str, int]:
+async def bad_request(e: HTTPException) -> tuple[str, int]:
     message = e.description if e.description != "Bad Request" else "Bad request."
-    return render_template("error.html", code=400, message=message), 400
+    return await render_template("error.html", code=400, message=message), 400
 
 
 @app.errorhandler(401)
-def unauthorized(e: HTTPException) -> tuple[str, int]:
+async def unauthorized(e: HTTPException) -> tuple[str, int]:
     message = (
         e.description if e.description != "Unauthorized" else "You need to log in."
     )
-    return render_template("error.html", code=401, message=message), 401
+    return await render_template("error.html", code=401, message=message), 401
 
 
 @app.errorhandler(404)
-def not_found(e: HTTPException) -> tuple[str, int]:
+async def not_found(e: HTTPException) -> tuple[str, int]:
     message = (
         e.description if e.description != "Not Found" else "That page doesn't exist."
     )
-    return render_template("error.html", code=404, message=message), 404
+    return await render_template("error.html", code=404, message=message), 404
 
 
 @app.errorhandler(500)
-def internal_error(e: HTTPException) -> tuple[str, int]:
-    return render_template(
+async def internal_error(e: HTTPException) -> tuple[str, int]:
+    return await render_template(
         "error.html", code=500, message="Something went wrong on our end."
     ), 500
 
 
 @app.errorhandler(502)
-def bad_gateway(e: HTTPException) -> tuple[str, int]:
+async def bad_gateway(e: HTTPException) -> tuple[str, int]:
     message = (
         e.description
         if e.description != "Bad Gateway"
         else "Couldn't reach the upstream server."
     )
-    return render_template("error.html", code=502, message=message), 502
+    return await render_template("error.html", code=502, message=message), 502
 
 
 # =============================================================================
@@ -393,7 +396,7 @@ def bad_gateway(e: HTTPException) -> tuple[str, int]:
 
 
 @app.route("/oauth-client-metadata.json")
-def oauth_client_metadata() -> WerkzeugResponse:
+async def oauth_client_metadata() -> WerkzeugResponse:
     app_url = request.url_root.replace("http://", "https://")
     client_id = f"{app_url}oauth-client-metadata.json"
     return jsonify(
@@ -415,12 +418,12 @@ def oauth_client_metadata() -> WerkzeugResponse:
 
 
 @app.route("/oauth/jwks.json")
-def oauth_jwks() -> WerkzeugResponse:
+async def oauth_jwks() -> WerkzeugResponse:
     return jsonify({"keys": [CLIENT_PUB_JWK]})
 
 
 @app.route("/pygments.css")
-def pygments_css() -> WerkzeugResponse:
+async def pygments_css() -> WerkzeugResponse:
     css = HtmlFormatter(style="default").get_style_defs()
     resp = Response(css, mimetype="text/css")
     resp.headers["Cache-Control"] = "public, max-age=86400"
@@ -433,12 +436,12 @@ def pygments_css() -> WerkzeugResponse:
 
 
 @app.route("/oauth/login", methods=("GET", "POST"))
-def oauth_login() -> WerkzeugResponse | str:
+async def oauth_login() -> WerkzeugResponse | str:
     if request.method != "POST":
         return redirect(url_for("index"))
 
-    check_csrf()
-    username = request.form["username"]
+    await check_csrf()
+    username = (await request.form)["username"]
     username = regex.sub(r"[\p{C}]", "", username)
     if username.startswith("@"):
         username = username[1:]
@@ -513,7 +516,7 @@ def oauth_login() -> WerkzeugResponse | str:
 
 
 @app.route("/oauth/callback")
-def oauth_callback() -> WerkzeugResponse:
+async def oauth_callback() -> WerkzeugResponse:
     if request.args.get("error"):
         flash("Login was denied or failed. Please try again.", "error")
         return redirect(url_for("index"))
@@ -588,7 +591,7 @@ def oauth_callback() -> WerkzeugResponse:
 
 
 @app.route("/oauth/logout")
-def oauth_logout() -> WerkzeugResponse:
+async def oauth_logout() -> WerkzeugResponse:
     if g.user:
         client_id, _ = compute_client_id(request.url_root)
         try:
@@ -607,7 +610,7 @@ def oauth_logout() -> WerkzeugResponse:
 
 
 @app.route("/")
-def index() -> str:
+async def index() -> str:
     recent = fetch_recent_bites(limit=5)
 
     # Pre-populate bite cache from feed data
@@ -623,21 +626,21 @@ def index() -> str:
             }, now)
 
     if g.user:
-        return render_template(
+        return await render_template(
             "create.html", recent=recent, did=g.user["did"], handle=g.user["handle"]
         )
 
-    return render_template("index.html", recent=recent)
+    return await render_template("index.html", recent=recent)
 
 
 @app.route("/b/new", methods=["POST"])
-def create_bite() -> WerkzeugResponse | str:
+async def create_bite() -> WerkzeugResponse | str:
     if not g.user:
         return redirect(url_for("oauth_login"))
-    check_csrf()
+    await check_csrf()
 
-    content: str = request.form["content"]
-    title: str = request.form.get("title", "").strip() or "Untitled"
+    content: str = (await request.form)["content"]
+    title: str = (await request.form).get("title", "").strip() or "Untitled"
     did: str = g.user["did"]
 
     body = {
@@ -662,7 +665,7 @@ def create_bite() -> WerkzeugResponse | str:
 
 
 @app.route("/u/<identifier>")
-def list_bites(identifier: str) -> WerkzeugResponse | str:
+async def list_bites(identifier: str) -> WerkzeugResponse | str:
     result = require_identity(identifier, "list_bites")
     if not isinstance(result, tuple):
         return result
@@ -670,7 +673,7 @@ def list_bites(identifier: str) -> WerkzeugResponse | str:
 
     pastes = fetch_bites(pds_url, did)
 
-    return render_template(
+    return await render_template(
         "list.html",
         pastes=pastes,
         did=did,
@@ -680,7 +683,7 @@ def list_bites(identifier: str) -> WerkzeugResponse | str:
 
 
 @app.route("/b/<path:identifier>/<rkey>")
-def view_bite(identifier: str, rkey: str) -> WerkzeugResponse | str:
+async def view_bite(identifier: str, rkey: str) -> WerkzeugResponse | str:
     result = require_identity(identifier, "view_bite", rkey=rkey)
     if not isinstance(result, tuple):
         return result
@@ -737,7 +740,7 @@ def view_bite(identifier: str, rkey: str) -> WerkzeugResponse | str:
         if not already_indexed:
             replies.insert(0, pending)
 
-    return render_template(
+    return await render_template(
         "view.html",
         title=title,
         paste_html=highlight_code(content),
@@ -754,17 +757,17 @@ def view_bite(identifier: str, rkey: str) -> WerkzeugResponse | str:
 
 
 @app.route("/b/<path:identifier>/<rkey>/reply", methods=["POST"])
-def create_reply(identifier: str, rkey: str) -> WerkzeugResponse:
+async def create_reply(identifier: str, rkey: str) -> WerkzeugResponse:
     if not g.user:
         return redirect(url_for("oauth_login"))
-    check_csrf()
+    await check_csrf()
 
-    text: str = request.form["text"].strip()
+    text: str = (await request.form)["text"].strip()
     if not text:
         return redirect(url_for("view_bite", identifier=identifier, rkey=rkey))
 
-    at_uri: str = request.form["at_uri"]
-    cid: str = request.form["cid"]
+    at_uri: str = (await request.form)["at_uri"]
+    cid: str = (await request.form)["cid"]
 
     body = {
         "repo": g.user["did"],
@@ -800,10 +803,10 @@ def create_reply(identifier: str, rkey: str) -> WerkzeugResponse:
 
 
 @app.route("/b/<path:identifier>/<rkey>/delete", methods=["POST"])
-def delete_bite(identifier: str, rkey: str) -> WerkzeugResponse:
+async def delete_bite(identifier: str, rkey: str) -> WerkzeugResponse:
     if not g.user:
         return redirect(url_for("oauth_login"))
-    check_csrf()
+    await check_csrf()
 
     if resolve_did(identifier) != g.user["did"]:
         abort(403, "You can only delete your own bites.")
@@ -818,12 +821,12 @@ def delete_bite(identifier: str, rkey: str) -> WerkzeugResponse:
 
 
 @app.route("/b/<path:identifier>/<rkey>/delete-reply", methods=["POST"])
-def delete_reply(identifier: str, rkey: str) -> WerkzeugResponse:
+async def delete_reply(identifier: str, rkey: str) -> WerkzeugResponse:
     if not g.user:
         return redirect(url_for("oauth_login"))
-    check_csrf()
+    await check_csrf()
 
-    reply_rkey: str | None = request.form.get("reply_rkey")
+    reply_rkey: str | None = (await request.form).get("reply_rkey")
     if not reply_rkey:
         abort(400)
 

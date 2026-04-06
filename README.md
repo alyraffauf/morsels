@@ -41,7 +41,7 @@ Requires Python 3.14+ and [uv](https://docs.astral.sh/uv/).
 git clone https://github.com/alyraffauf/morsels.git
 cd morsel
 uv sync
-uv run flask --app main run --debug
+just dev
 ```
 
 ## Architecture
@@ -62,7 +62,7 @@ External services:
 
 All configuration is automatic. On first run, morsels generates:
 
-- `secrets.json` — Flask secret key and OAuth client signing key
+- `secrets.json` — app secret key and OAuth client signing key
 - `morsel.db` — SQLite database for OAuth sessions
 
 Set `MORSEL_DATA_DIR` to control where these files are stored (default: current directory, `/data` in Docker).
