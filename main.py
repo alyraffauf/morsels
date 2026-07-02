@@ -3,6 +3,7 @@ import json
 # =============================================================================
 # App setup
 # =============================================================================
+import asyncio
 import os
 import secrets
 import sqlite3
@@ -256,7 +257,8 @@ async def authed_pds_request(
     if resp.status_code == 401:  # type: ignore[union-attr]
         client_id, _ = compute_client_id(request.url_root)
         try:
-            tokens, dpop_nonce = refresh_token_request(
+            tokens, dpop_nonce = await asyncio.to_thread(
+                refresh_token_request,
                 g.user,
                 client_id,
                 CLIENT_SECRET_JWK,
@@ -474,7 +476,8 @@ async def oauth_login() -> WerkzeugResponse | str:
     client_id, redirect_uri = compute_client_id(request.url_root)
 
     try:
-        pkce_verifier, state, dpop_authserver_nonce, resp = send_par_auth_request(
+        pkce_verifier, state, dpop_authserver_nonce, resp = await asyncio.to_thread(
+            send_par_auth_request,
             authserver_url,
             authserver_meta,
             username,
@@ -542,7 +545,8 @@ async def oauth_callback() -> WerkzeugResponse:
 
     client_id, redirect_uri = compute_client_id(request.url_root)
     try:
-        tokens, dpop_authserver_nonce = initial_token_request(
+        tokens, dpop_authserver_nonce = await asyncio.to_thread(
+            initial_token_request,
             row,
             code,
             client_id,
@@ -597,7 +601,9 @@ async def oauth_logout() -> WerkzeugResponse:
     if g.user:
         client_id, _ = compute_client_id(request.url_root)
         try:
-            revoke_token_request(g.user, client_id, CLIENT_SECRET_JWK)
+            await asyncio.to_thread(
+                revoke_token_request, g.user, client_id, CLIENT_SECRET_JWK
+            )
         except Exception:
             pass
         query_db("DELETE FROM oauth_session WHERE did = ?;", [g.user["did"]])
